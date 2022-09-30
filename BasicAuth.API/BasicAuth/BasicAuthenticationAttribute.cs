@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Security.Claims;
 using System.Security.Principal;
 using System.Text;
 using System.Threading;
@@ -37,12 +38,29 @@ namespace BasicAuth.API.BasicAuth
 
                     if (ValidateUser.Login(username, password))
                     {
-                        Thread.CurrentPrincipal = new GenericPrincipal(new GenericIdentity(username), null);
+                        var userDetails = ValidateUser.GetUserDetails(username, password);
+                        var identity = new GenericIdentity(username);
+                        identity.AddClaim(new Claim(ClaimTypes.Name,userDetails.UserName));
+                        identity.AddClaim(new Claim(ClaimTypes.Email, userDetails.Email));
+                        identity.AddClaim(new Claim("Id", Convert.ToString(userDetails.Id)));
+
+                        IPrincipal principal = new GenericPrincipal(identity, userDetails.Roles.Split(','));
+
+                        Thread.CurrentPrincipal = principal;
+                        if (HttpContext.Current != null)
+                        {
+                            HttpContext.Current.User = principal;
+                        }
+                        else 
+                        {
+                            actionContext.Response = actionContext.Request
+                                .CreateErrorResponse(HttpStatusCode.Unauthorized, "Authorization Denied");
+                        }
                     }
                     else
                     {
                         actionContext.Response = actionContext.Request
-                            .CreateErrorResponse(HttpStatusCode.Unauthorized, "Login failed");
+                            .CreateErrorResponse(HttpStatusCode.Unauthorized, "Invaild Credentials");
                     }
                 }
                 catch (Exception)
